@@ -26,7 +26,10 @@
 -export([bind_udp/2, bind_tcp/2, bind_tls/2, allocate_udp/5]).
 
 -define(STUN_IP, {192,168,0,247}).
+%%-define(STUN_IP, {172,253,56,127}). % stun server ip, ping stun2.l.google.com
+-define(MY_IP, {192,168,0,247}). % my out ip
 -define(STUN_PORT, 34780).
+%%-define(STUN_PORT, 19302).
 -define(AUTO_PORT, 34781).
 -define(STUNS_PORT, 53490).
 -define(RECV_TIMEOUT, timer:seconds(5)).
@@ -76,11 +79,13 @@ bind_udp_test() ->
     Msg = #stun{method = ?STUN_METHOD_BINDING,
  		class = request,
  		trid = TrID},
-    {ok, Socket} = gen_udp:open(0, [binary, {ip, ?STUN_IP}, {active, false}]),
+    {ok, Socket} = gen_udp:open(0, [binary, {ip, ?MY_IP}, {active, false}]),
     {ok, Addr} = inet:sockname(Socket),
     PktOut = stun_codec:encode(Msg),
     ?assertEqual(ok, gen_udp:send(Socket, ?STUN_IP, ?STUN_PORT, PktOut)),
     {ok, {_, _, PktIn}} = gen_udp:recv(Socket, 0, ?RECV_TIMEOUT),
+io:format("~p~n", [stun_codec:decode(PktIn, datagram)]),
+io:format("~p, ~p~n", [TrID, Addr]),
     ?assertMatch(
        {ok, #stun{trid = TrID,
 		  'XOR-MAPPED-ADDRESS' = Addr}},
@@ -171,8 +176,8 @@ del_auto_listener_test() ->
 -endif.
 
 allocate_udp_test() ->
-    {ok, Socket} = gen_udp:open(0, [binary, {ip, ?STUN_IP}, {active, false}]),
-    {ok, PeerSocket} = gen_udp:open(0, [binary, {ip, ?STUN_IP}, {active, false}]),
+    {ok, Socket} = gen_udp:open(0, [binary, {ip, ?MY_IP}, {active, false}]),
+    {ok, PeerSocket} = gen_udp:open(0, [binary, {ip, ?MY_IP}, {active, false}]),
     {ok, PeerAddr} = inet:sockname(PeerSocket),
 io:format("PeerAddr: ~p~n", [PeerAddr]),
     {ok, Addr} = inet:sockname(Socket),
@@ -264,13 +269,15 @@ io:format("~p == ~p, RelayIP, RelayPort: ~p, ~p~n", [PeerAddr, StunData2#stun.'X
     Data3 = crypto:strong_rand_bytes(20),
     Msg6 = #turn{channel = ?CHANNEL, data = Data3},
     PktOut6 = stun_codec:encode(Msg6),
+io:format("PktOut6: ~p~n", [PktOut6]),
     ?assertEqual(ok, gen_udp:send(Socket, ?STUN_IP, ?STUN_PORT, PktOut6)),
     ?assertMatch({ok, {_, _, Data3}}, gen_udp:recv(PeerSocket, 0, ?RECV_TIMEOUT)),
     %% The peer sends the data back. We receive it.
     ?assertEqual(ok, gen_udp:send(PeerSocket, RelayIP, RelayPort, Data3)),
     {ok, {_, _, Data4}} = gen_udp:recv(Socket, 0, ?RECV_TIMEOUT),
+io:format("Data4: ~p~n", [Data4]),
     {ok, StunData4} = stun_codec:decode(Data4, datagram),
-    io:format("~p~n", [stun_codec:decode(Data4, datagram)]),
+io:format("~p~n", [stun_codec:decode(Data4, datagram)]),
     ?assertMatch(?CHANNEL, StunData4#turn.channel),  %% ** exception error: {badrecord,turn}
     ?assertMatch(Data3, StunData4#turn.data),
     %% ?assertMatch(
